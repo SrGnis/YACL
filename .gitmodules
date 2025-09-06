@@ -1,0 +1,4 @@
+[submodule "src/yacl/resources/assets/themes/Azure-ttk-theme"]
+	path = src/yacl/resources/assets/themes/Azure-ttk-theme
+	url = https://github.com/rdbende/Azure-ttk-theme.git
+	branch = main

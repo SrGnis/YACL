@@ -1,0 +1,212 @@
+name: Build and Release YACL
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Triggers on semantic version tags like v1.0.0, v1.2.3, etc.
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # Job to extract release information from the tag
+  prepare-release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      is_prerelease: ${{ steps.check_prerelease.outputs.is_prerelease }}
+      release_name: ${{ steps.get_version.outputs.release_name }}
+    steps:
+      - name: Get version from tag
+        id: get_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "release_name=YACL $VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
+
+      - name: Check if prerelease
+        id: check_prerelease
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          if [[ "$VERSION" =~ (alpha|beta|rc|dev|pre) ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            echo "This is a prerelease version"
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            echo "This is a stable release"
+          fi
+
+  # Build for Linux
+  build-linux:
+    runs-on: ubuntu-22.04 
+    needs: prepare-release
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Build Linux executable
+        run: |
+          echo "Building YACL for Linux using Nuitka..."
+          python build.py --platform=linux --standalone
+
+          # Verify build output
+          if [ ! -d "dist/yacl_linux" ]; then
+            echo "ERROR: Build failed - dist/yacl directory not found"
+            exit 1
+          fi
+
+          if [ ! -f "dist/yacl_linux/yacl" ]; then
+            echo "ERROR: Build failed - yacl_linux executable not found"
+            exit 1
+          fi
+
+          # Verify distribution package
+          if [ ! -f "dist/yacl_linux.tar.gz" ]; then
+            echo "ERROR: Distribution package not found"
+            exit 1
+          fi
+
+          echo "✅ Linux build completed successfully"
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: yacl-linux-${{ needs.prepare-release.outputs.version }}
+          path: dist/yacl_linux.tar.gz
+          retention-days: 30
+
+  # Build for Windows
+  build-windows:
+    runs-on: windows-latest
+    needs: prepare-release
+    env:
+      NUITKA_ASSUME_YES_FOR_DOWNLOADS: 1
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Build Windows executable
+        run: |
+          Write-Output "Building YACL for Windows using Nuitka..."
+          python build.py --platform=windows --standalone
+
+          # Verify build output
+          if (!(Test-Path "dist\yacl_windows")) {
+            Write-Error "ERROR: Build failed - dist\yacl directory not found"
+            exit 1
+          }
+
+          if (!(Test-Path "dist\yacl_windows\yacl.exe")) {
+            Write-Error "ERROR: Build failed - yacl.exe executable not found"
+            exit 1
+          }
+
+          if (!(Test-Path "dist\yacl_windows.zip")) {
+            Write-Error "ERROR: Distribution package not found"
+            exit 1
+          }
+
+          Write-Output "✅ Windows build completed successfully"
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: yacl-windows-${{ needs.prepare-release.outputs.version }}
+          path: dist/yacl_windows.zip
+          retention-days: 30
+
+  # Create GitHub Release
+  create-release:
+    runs-on: ubuntu-latest
+    needs: [prepare-release, build-linux, build-windows]
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history for changelog generation
+          submodules: recursive
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: yacl-linux-${{ needs.prepare-release.outputs.version }}
+          path: ./artifacts/
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: yacl-windows-${{ needs.prepare-release.outputs.version }}
+          path: ./artifacts/
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          VERSION=${{ needs.prepare-release.outputs.version }}
+          echo "Release $VERSION" > release_notes.md
+          echo "" >> release_notes.md
+          echo "## Downloads" >> release_notes.md
+          echo "- **Linux**: Download yacl_linux.tar.gz for Linux systems" >> release_notes.md
+          echo "- **Windows**: Download yacl_windows.zip for Windows systems" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## Installation" >> release_notes.md
+          echo "Extract the downloaded archive and run the yacl executable." >> release_notes.md
+          cat release_notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ${{ needs.prepare-release.outputs.release_name }}
+          tag_name: ${{ needs.prepare-release.outputs.version }}
+          body_path: release_notes.md
+          prerelease: ${{ needs.prepare-release.outputs.is_prerelease }}
+          files: |
+            ./artifacts/yacl_linux.tar.gz
+            ./artifacts/yacl_windows.zip
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

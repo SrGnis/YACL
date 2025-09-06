@@ -1,0 +1,23 @@
+{
+  "game_types": [
+    {
+      "name": "dda",
+      "display_name": "Cataclysm: Dark Days Ahead",
+      "repository": "CleverRaven/Cataclysm-DDA",
+      "executable_name": { "windows": "cataclysm-tiles.exe", "linux": "cataclysm-launcher" }
+    },
+    {
+      "name": "bn",
+      "display_name": "Cataclysm: Bright Nights",
+      "repository": "cataclysmbnteam/Cataclysm-BN",
+      "executable_name": { "windows": "cataclysm-bn-tiles.exe", "linux": "cataclysm-launcher" }
+    },
+    {
+      "name": "tlg",
+      "display_name": "Cataclysm: The Last Generation",
+      "repository": "Cataclysm-TLG/Cataclysm-TLG",
+      "executable_name": { "windows": "cataclysm-tiles.exe", "linux": "cataclysm-launcher" }
+    }
+  ],
+  "cataclysm_db_repo": "SrGnis/cataclysm-db"
+}

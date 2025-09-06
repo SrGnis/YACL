@@ -1,0 +1,9 @@
+{
+  "game": "dda",
+  "channel": "stable",
+  "update_current_when_installing": true,
+  "keep_open_after_starting_game": true,
+  "debug_mode": false,
+  "enable_cataclysm_db": true,
+  "enable_db_auto_update": true
+}
