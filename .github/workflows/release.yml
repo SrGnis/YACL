@@ -69,7 +69,7 @@ jobs:
       - name: Build Linux executable
         run: |
           echo "Building YACL for Linux using Nuitka..."
-          python build.py --platform=linux --standalone
+          python build.py --platform=linux
 
           # Verify build output
           if [ ! -d "dist/yacl_linux" ]; then
@@ -131,7 +131,7 @@ jobs:
       - name: Build Windows executable
         run: |
           Write-Output "Building YACL for Windows using Nuitka..."
-          python build.py --platform=windows --standalone
+          python build.py --platform=windows
 
           # Verify build output
           if (!(Test-Path "dist\yacl_windows")) {
