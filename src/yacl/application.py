@@ -16,6 +16,7 @@ from yacl.ui.startup_window import StartupWindow
 from yacl.services import settings
 from yacl.services import downloader, events, paths
 from yacl.services.cataclysm_db import initialize_cataclysm_db_manager, shutdown_cataclysm_db_manager, get_cataclysm_db_manager
+from yacl.services.icon_service import initialize_icon_service, shutdown_icon_service
 from yacl.models.installation_manager import initialize_installation_manager, shutdown_installation_manager
 from yacl.models.release_manager import initialize_release_manager, shutdown_release_manager
 from yacl.utils.logging_handler import add_event_manager_handler_to_logger
@@ -195,7 +196,11 @@ class YACLApplication:
             if not downloader.initialize_download_manager(self.event_manager):
                 self.logger.error("Failed to initialize download manager")
                 return False
-            
+
+            if not initialize_icon_service():
+                self.logger.error("Failed to initialize icon service")
+                return False
+
             # TODO: move window setup to its own method and after it call setup_catacylsm_db
             window_state_file = self.path_manager.config_dir / "window_state.json"
             if not self._initialize_window_manager(window_state_file):
@@ -432,6 +437,8 @@ class YACLApplication:
             self.logger.info("Shutting down core systems...")
 
             downloader.shutdown_download_manager()
+
+            shutdown_icon_service()
 
             settings.shutdown_settings()
 
