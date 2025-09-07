@@ -267,7 +267,7 @@ class MainWindow:
 
             ttk.Label(header_frame, text="Status Log:", font=('TkDefaultFont', 9, 'bold')).pack(side=tk.LEFT)
 
-            self.version_text = ttk.Label(header_frame, text="YACL v0.0.1")
+            self.version_text = ttk.Label(header_frame, text="YACL")
             self.version_text.pack(side=tk.RIGHT)
 
             log_frame = ttk.Frame(self.status_frame)

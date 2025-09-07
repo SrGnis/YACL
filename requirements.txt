@@ -1,3 +1,6 @@
+# UI and theming
+cairosvg==2.8.2
+
 # Event/Signal management
 blinker==1.9.0
 
