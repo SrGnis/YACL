@@ -11,8 +11,6 @@ from pathlib import Path
 from typing import Optional, Dict
 import tkinter as tk
 
-import cairosvg
-
 from yacl.services.paths import get_paths
 from yacl.utils.helpers import get_resource_base_path
 
@@ -41,29 +39,39 @@ class IconService:
         self._image_cache: Dict[str, tk.PhotoImage] = {}
 
         self._is_initialized = False
+        self.cairosvg_available = False
     
     def initialize(self) -> bool:
         """
         Initialize the icon service and create cache directory.
-        
+
         Returns:
             bool: True if initialization was successful
         """
         try:
             self.logger.info("Initializing icon service...")
-            
+
+            # Try to import cairosvg to check availability
+            try:
+                import cairosvg
+                self.cairosvg_available = True
+                self.logger.info("cairosvg is available for SVG to PNG conversion")
+            except Exception as e:
+                self.cairosvg_available = False
+                self.logger.warning(f"cairosvg not available (likely on Windows): {e}. SVG to PNG conversion disabled.")
+
             # Create cache directory if it doesn't exist
             self.cache_dir.mkdir(parents=True, exist_ok=True)
-            
+
             # Verify SVG icons directory exists
             if not self.svg_icons_dir.exists():
                 self.logger.error(f"SVG icons directory not found: {self.svg_icons_dir}")
                 return False
-            
+
             self._is_initialized = True
             self.logger.info("Icon service initialized successfully")
             return True
-            
+
         except Exception as e:
             self.logger.error(f"Failed to initialize icon service: {e}")
             return False
@@ -149,18 +157,26 @@ class IconService:
     def _convert_svg_to_png(self, svg_path: Path, png_path: Path, size: int) -> Optional[Path]:
         """
         Convert an SVG file to PNG format.
-        
+
         Args:
             svg_path: Path to the source SVG file
             png_path: Path where the PNG file should be saved
             size: Size in pixels for the PNG conversion
-            
+
         Returns:
             Optional[Path]: Path to the converted PNG file, or None if conversion failed
         """
         try:
+            # Check if cairosvg is available before attempting conversion
+            if not self.cairosvg_available:
+                self.logger.warning("cairosvg not available. SVG to PNG conversion disabled.")
+                return None
+
+            # Import cairosvg (we know it's available from the initialization check)
+            import cairosvg
+
             self.logger.debug(f"Converting SVG to PNG: {svg_path} -> {png_path}")
-            
+
             # Convert SVG to PNG using cairosvg
             cairosvg.svg2png(
                 url=str(svg_path),
@@ -169,7 +185,7 @@ class IconService:
                 output_height=size,
                 negate_colors=True # TODO: Set this based on theme
             )
-            
+
             # Verify the PNG file was created
             if png_path.exists():
                 self.logger.debug(f"Successfully converted icon: {png_path}")
@@ -177,7 +193,7 @@ class IconService:
             else:
                 self.logger.error(f"PNG file was not created: {png_path}")
                 return None
-                
+
         except Exception as e:
             self.logger.error(f"Failed to convert SVG to PNG: {e}")
             return None
