@@ -54,7 +54,6 @@ class GameTabController:
         self.event_manager = event_manager
         
         # State variables
-        self.current_game_type = GameType.all[0]
         self.current_channel = ReleaseChannel.STABLE
         self.current_releases: List[GameRelease] = []
         self.filtered_releases: List[GameRelease] = []  # Releases after search filtering
@@ -66,9 +65,6 @@ class GameTabController:
 
         # Track current modal for proper cleanup
         self.current_modal: Optional[tk.Toplevel] = None
-
-        # Initialize game from settings
-        self._initialize_game_from_settings()
 
         # Initialize channel from settings
         self._initialize_channel_from_settings()
@@ -83,20 +79,6 @@ class GameTabController:
         self._setup_event_handlers()
 
         self.logger.info("Game tab controller initialized")
-
-    def _initialize_game_from_settings(self):
-        """Initialize the current game from settings."""
-        try:
-            settings = get_settings()
-            game_setting = settings.read("game", GameType.all[0].name)
-            self.current_game_type = GameType.get_game_type_by_name(game_setting)
-
-            # Update UI
-            self.view.game_selector.set(self.current_game_type.display_name)
-
-        except Exception as e:
-            self.logger.error(f"Error initializing game from settings: {e}")
-            self.current_game_type = GameType.all[0]
 
     def _initialize_channel_from_settings(self):
         """Initialize the current channel from settings."""
@@ -160,6 +142,8 @@ class GameTabController:
         try:
             self.event_manager.subscribe(Events.INSTALLATION_STARTED, self._on_installation_started)
             self.event_manager.subscribe(Events.INSTALLATION_FINISHED, self._on_installation_finished)
+            self.event_manager.subscribe(Events.CURRENT_GAME_TYPE_CHANGED, self._on_current_game_type_changed)
+            self.event_manager.subscribe(Events.ACTIVE_INSTALLATION_CHANGED, self._on_active_installation_changed)
 
             self.logger.debug("Subscribed to events")
 
@@ -171,6 +155,8 @@ class GameTabController:
         try:
             self.event_manager.unsubscribe(Events.INSTALLATION_STARTED, self._on_installation_started)
             self.event_manager.unsubscribe(Events.INSTALLATION_FINISHED, self._on_installation_finished)
+            self.event_manager.unsubscribe(Events.CURRENT_GAME_TYPE_CHANGED, self._on_current_game_type_changed)
+            self.event_manager.unsubscribe(Events.ACTIVE_INSTALLATION_CHANGED, self._on_active_installation_changed)
 
             self.logger.debug("Unsubscribed from events")
 
@@ -180,6 +166,11 @@ class GameTabController:
     def refresh_ui(self):
         """Refresh the UI state."""
         try:
+            # Update game selector with current game type
+            installation_manager = get_installation_manager()
+            current_game_type = installation_manager.get_current_game_type()
+            self.view.game_selector.set(current_game_type.display_name)
+
             self._update_channel_ui()
 
             self._refresh_releases()
@@ -204,20 +195,14 @@ class GameTabController:
             selected_game = self.view.get_selected_game()
             if selected_game:
                 game_type = GameType.get_game_type_by_display_name(selected_game)
-                if game_type != self.current_game_type:
-                    self.current_game_type = game_type
+                installation_manager = get_installation_manager()
+                current_game_type = installation_manager.get_current_game_type()
 
-                    # Update settings
-                    try:
-                        settings = get_settings()
-                        settings.store(f"game", self.current_game_type.name)
-                    except RuntimeError:
-                        # Settings not initialized, skip
-                        self.logger.debug("Settings not initialized, skipping game storage")
-                        pass
+                if game_type != current_game_type:
+                    # Use InstallationManager to set the new game type
+                    installation_manager.set_current_game_type(game_type)
+                    # UI refresh will be handled by the event handler
 
-                    self.refresh_ui()
-                
         except Exception as e:
             self.logger.error(f"Error handling game selection: {e}")
 
@@ -477,10 +462,12 @@ class GameTabController:
         """Refresh the releases list from the release manager."""
         try:
             release_manager = get_release_manager()
+            installation_manager = get_installation_manager()
+            current_game_type = installation_manager.get_current_game_type()
 
             # Fetch releases for current game and channel
             self.current_releases = release_manager.get_releases(
-                game_type=self.current_game_type,
+                game_type=current_game_type,
                 channel=self.current_channel,
                 limit=None,
                 force_refresh=force_fetch
@@ -551,7 +538,9 @@ class GameTabController:
             self._refresh_active_install_ui()
 
             # Log current installations for debugging
-            current_game = self.current_game_type.name
+            installation_manager = get_installation_manager()
+            current_game_type = installation_manager.get_current_game_type()
+            current_game = current_game_type.name
             installations = self.get_current_installations()
 
             if installations:
@@ -633,7 +622,8 @@ class GameTabController:
         try:
             installation_manager = get_installation_manager()
             installation_manager.reload_installed_games()
-            installations = installation_manager.installed_games.get(self.current_game_type, {})
+            current_game_type = installation_manager.get_current_game_type()
+            installations = installation_manager.installed_games.get(current_game_type, {})
             return installations
 
         except Exception as e:
@@ -648,10 +638,9 @@ class GameTabController:
             str: Name of active installation or None if none set
         """
         try:
-            settings = get_settings()
-            current_game = self.current_game_type.name
-            active_install = settings.read(f"active_install_{current_game}", "")
-            return active_install
+            installation_manager = get_installation_manager()
+            active_installation = installation_manager.get_active_installation()
+            return active_installation.name if active_installation else None
 
         except Exception as e:
             self.logger.error(f"Error getting active installation: {e}")
@@ -668,23 +657,8 @@ class GameTabController:
             bool: True if successfully set
         """
         try:
-            # Verify the installation exists
-            installations = self.get_current_installations()
-            if installation_name not in installations:
-                self.logger.warning(f"Installation not found: {installation_name}")
-                return False
-
-            # Update settings
-            settings = get_settings()
-            current_game = self.current_game_type.name
-            settings.store(f"active_install_{current_game}", installation_name)
-
-            self.logger.info(f"Set active installation: {installation_name}")
-
-            # Refresh UI to reflect changes
-            self._refresh_active_install_ui()
-
-            return True
+            installation_manager = get_installation_manager()
+            return installation_manager.set_active_installation_by_name(installation_name)
 
         except Exception as e:
             self.logger.error(f"Error setting active installation: {e}")
@@ -708,8 +682,9 @@ class GameTabController:
             installation_manager = get_installation_manager()
 
             # Delegate removal logic to InstallationManager
+            current_game_type = installation_manager.get_current_game_type()
             result = installation_manager.remove_installation(
-                self.current_game_type, installation_name
+                current_game_type, installation_name
             )
 
             if result["success"]:
@@ -738,9 +713,12 @@ class GameTabController:
             bool: True if game was launched successfully
         """
         try:
+            installation_manager = get_installation_manager()
+            current_game_type = installation_manager.get_current_game_type()
+
             paths = get_paths()
             # Get the userdata directory
-            userdata_path = paths.get_game_user_dir(self.current_game_type.name)
+            userdata_path = paths.get_game_user_dir(current_game_type.name)
 
             # Ensure userdata directory exists
             userdata_path.mkdir(parents=True, exist_ok=True)
@@ -749,9 +727,9 @@ class GameTabController:
             self.logger.info(f"Starting game on {system} from {install_path}")
 
             if system == "Linux":
-                return self._start_game_linux(install_path, str(userdata_path), world_name)
+                return self._start_game_linux(install_path, str(userdata_path), world_name, current_game_type)
             elif system == "Windows":
-                return self._start_game_windows(install_path, str(userdata_path), world_name)
+                return self._start_game_windows(install_path, str(userdata_path), world_name, current_game_type)
             else:
                 self.logger.error(f"Unsupported operating system: {system}")
                 return False
@@ -760,15 +738,15 @@ class GameTabController:
             self.logger.error(f"Error starting game: {e}")
             return False
 
-    def _start_game_linux(self, install_path: str, userdata_path: str, world_name: str = "") -> bool:
+    def _start_game_linux(self, install_path: str, userdata_path: str, world_name: str, current_game_type: GameType) -> bool:
         """Start the game on Linux."""
         try:
             # Determine the executable name based on game type
-            if self.current_game_type.executable_name is None:
-                raise ValueError(f"Executable name not defined for {self.current_game_type}")
-            exe_file = self.current_game_type.executable_name.get("linux")
+            if current_game_type.executable_name is None:
+                raise ValueError(f"Executable name not defined for {current_game_type}")
+            exe_file = current_game_type.executable_name.get("linux")
             if exe_file is None:
-                raise ValueError(f"Executable name not defined for {self.current_game_type}")
+                raise ValueError(f"Executable name not defined for {current_game_type}")
             
             # Look for the launcher executable
             launcher_path = Path(install_path) / exe_file
@@ -803,15 +781,15 @@ class GameTabController:
             self.logger.error(f"Error starting game on Linux: {e}")
             return False
 
-    def _start_game_windows(self, install_path: str, userdata_path: str, world_name: str = "") -> bool:
+    def _start_game_windows(self, install_path: str, userdata_path: str, world_name: str, current_game_type: GameType) -> bool:
         """Start the game on Windows."""
         try:
             # Determine the executable name based on game type
-            if self.current_game_type.executable_name is None:
-                raise ValueError(f"Executable name not defined for {self.current_game_type}")
-            exe_file = self.current_game_type.executable_name.get("windows")
+            if current_game_type.executable_name is None:
+                raise ValueError(f"Executable name not defined for {current_game_type}")
+            exe_file = current_game_type.executable_name.get("windows")
             if exe_file is None:
-                raise ValueError(f"Executable name not defined for {self.current_game_type}")
+                raise ValueError(f"Executable name not defined for {current_game_type}")
 
             exe_path = Path(install_path) / exe_file
             if not exe_path.exists():
@@ -856,8 +834,11 @@ class GameTabController:
         """
         try:
             # The lastworld.json file is in the config subdirectory of userdata
+            installation_manager = get_installation_manager()
+            current_game_type = installation_manager.get_current_game_type()
+
             paths = get_paths()
-            config_path = paths.get_game_user_dir(self.current_game_type.name) / "config" / "lastworld.json"
+            config_path = paths.get_game_user_dir(current_game_type.name) / "config" / "lastworld.json"
 
             if not config_path.exists():
                 self.logger.debug(f"No lastworld.json found at: {config_path}")
@@ -886,10 +867,16 @@ class GameTabController:
             release: The newly installed/updated release
         """
         try:
-            settings = get_settings()
-            game_type_value = release.game_type.name
-            settings.store(f"active_install_{game_type_value}", release.name)
-            self.logger.info(f"Updated active installation: {release.name}")
+            installation_manager = get_installation_manager()
+
+            # Get the GameInstallation object for the release
+            installations = installation_manager.installed_games.get(release.game_type, {})
+            if release.name in installations:
+                installation = installations[release.name]
+                installation_manager.set_active_installation(installation, release.game_type)
+                self.logger.info(f"Updated active installation: {release.name}")
+            else:
+                self.logger.warning(f"Installation '{release.name}' not found for {release.game_type.name}")
 
         except Exception as e:
             self.logger.error(f"Error updating active installation: {e}")
@@ -1038,6 +1025,47 @@ class GameTabController:
 
         except Exception as e:
             self.logger.error(f"Error handling installation finished event: {e}")
+
+    def _on_current_game_type_changed(self, sender, **kwargs):
+        """Handle current game type changed event."""
+        try:
+            old_game_type = kwargs.get('old_game_type')
+            new_game_type = kwargs.get('new_game_type')
+
+            if new_game_type:
+                self.logger.info(f"Game type changed from {old_game_type.name if old_game_type else 'None'} to {new_game_type.name}")
+
+                # Update UI to reflect new game type
+                self.view.game_selector.set(new_game_type.display_name)
+
+                # Refresh UI for new game type
+                self.refresh_ui()
+
+        except Exception as e:
+            self.logger.error(f"Error handling game type changed event: {e}")
+
+    def _on_active_installation_changed(self, sender, **kwargs):
+        """Handle active installation changed event."""
+        try:
+            game_type = kwargs.get('game_type')
+            old_active = kwargs.get('old_active')
+            new_active = kwargs.get('new_active')
+            reason = kwargs.get('reason', 'unknown')
+
+            installation_manager = get_installation_manager()
+            current_game_type = installation_manager.get_current_game_type()
+
+            # Only update UI if this change affects the current game type
+            if game_type == current_game_type:
+                game_name = game_type.name if game_type else "unknown"
+                self.logger.info(f"Active installation changed for {game_name}: {old_active} -> {new_active} (reason: {reason})")
+
+                # Refresh installations list and active installation UI
+                self._refresh_installations_list()
+                self._refresh_active_install_ui()
+
+        except Exception as e:
+            self.logger.error(f"Error handling active installation changed event: {e}")
 
     def shutdown(self):
         """Shutdown the controller and clean up resources."""
