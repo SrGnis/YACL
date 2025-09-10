@@ -113,3 +113,59 @@ We use the following prefixes to keep commit history readable:
 * **style:** formatting-only changes
 
 ---
+
+## Release Process
+
+YACL uses an automated GitHub Actions workflow to build and release executables for both Linux and Windows. The release process supports both stable releases and prereleases based on the source branch and tag format.
+
+### Release Types
+
+#### Stable Releases
+- **Source**: Must be created from the `main` branch
+- **Tag format**: `v*.*.*` (e.g., `v1.0.0`, `v1.2.3`)
+- **Release type**: Stable release on GitHub
+- **Use case**: Production-ready versions
+
+#### Prereleases
+- **Source**: Any branch other than `main`, OR tags with `dev-` prefix
+- **Tag formats**:
+  - `dev-v*.*.*` (e.g., `dev-v1.0.0`, `dev-v1.2.3`) - for development versions
+  - `v*.*.*` from non-main branches - for branch-specific testing
+- **Release type**: Prerelease on GitHub
+- **Use case**: Testing, development, and experimental features
+
+### Creating a Release
+
+#### For Stable Releases:
+1. Ensure you're on the `main` branch with all changes merged
+2. Create and push a semantic version tag:
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+
+#### For Prereleases:
+1. From any development branch, create and push a dev-prefixed tag:
+   ```bash
+   git tag dev-v1.0.0-beta
+   git push origin dev-v1.0.0-beta
+   ```
+2. Or create a regular semantic version tag from a non-main branch:
+   ```bash
+   git checkout feature/new-feature
+   git tag v1.0.0-test
+   git push origin v1.0.0-test
+   ```
+
+### Workflow Behavior
+
+The GitHub Actions workflow will automatically:
+- Detect the tag format and source branch
+- Build executables for Linux and Windows
+- Create a GitHub release with appropriate release type (stable/prerelease)
+- Upload build artifacts to the release
+- Generate release notes with download instructions
+
+Prerelease versions will be clearly marked with warnings in the release notes and will not be shown as the "latest" release on GitHub.
+
+---
