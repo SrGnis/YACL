@@ -9,6 +9,7 @@ This is the View component in the MVC pattern - it only handles UI rendering and
 from typing import Optional, List
 import tkinter as tk
 from tkinter import ttk
+from datetime import datetime
 
 from yacl.ui.widgets.base_tab import BaseTab
 from yacl.services.events import EventManager
@@ -38,14 +39,14 @@ class BackupTab(BaseTab):
         super().__init__(parent_frame, event_manager)
 
         # UI widget references
-        self.backup_listbox: Optional[tk.Listbox] = None
-        self.details_text: Optional[tk.Text] = None
-        self.refresh_button: Optional[ttk.Button] = None
-        self.delete_button: Optional[ttk.Button] = None
-        self.restore_button: Optional[ttk.Button] = None
-        self.backup_name_entry: Optional[ttk.Entry] = None
-        self.create_button: Optional[ttk.Button] = None
-        self.backup_name_var: Optional[tk.StringVar] = None
+        self.backup_listbox: tk.Listbox
+        self.details_text: tk.Text
+        self.refresh_button: ttk.Button
+        self.delete_button: ttk.Button
+        self.restore_button: ttk.Button
+        self.backup_name_entry: ttk.Entry
+        self.create_button: ttk.Button
+        self.backup_name_var: tk.StringVar
 
     def _create_tab_content(self):
         """Create the backup tab specific content."""
@@ -65,15 +66,19 @@ class BackupTab(BaseTab):
         # Create backup creation form
         self._create_backup_form(main_container)
 
+        # Auto-populate backup name with default timestamp
+        self._set_default_backup_name()
+
     def _create_top_section(self, parent: ttk.Frame):
         """Create the two-column top section with backup list and details."""
         # Top section frame
         top_frame = ttk.Frame(parent)
         top_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
 
-        # Configure grid weights for equal columns
-        top_frame.grid_columnconfigure(0, weight=1)
-        top_frame.grid_columnconfigure(1, weight=1)
+        # Configure grid weights for equal columns and proper row expansion
+        top_frame.grid_columnconfigure(0, weight=1, uniform="columns")
+        top_frame.grid_columnconfigure(1, weight=1, uniform="columns")
+        top_frame.grid_rowconfigure(0, weight=1)
 
         # Left column: Backup list
         self._create_backup_list_section(top_frame)
@@ -139,18 +144,26 @@ class BackupTab(BaseTab):
         action_frame = ttk.Frame(parent)
         action_frame.pack(fill=tk.X, pady=(0, 10))
 
+        # Center container for buttons
+        button_container = ttk.Frame(action_frame)
+        button_container.pack(expand=True)
+
         # Refresh button
         self.refresh_button = ttk.Button(
-            action_frame,
+            button_container,
             text="Refresh",
+            image=load_icon("refresh-cw", 16) or "",
+            compound=tk.LEFT,
             width=12
         )
         self.refresh_button.pack(side=tk.LEFT, padx=(0, 5))
 
         # Delete button
         self.delete_button = ttk.Button(
-            action_frame,
+            button_container,
             text="Delete",
+            image=load_icon("trash-2", 16) or "",
+            compound=tk.LEFT,
             width=12,
             state=tk.DISABLED
         )
@@ -158,8 +171,10 @@ class BackupTab(BaseTab):
 
         # Restore button
         self.restore_button = ttk.Button(
-            action_frame,
+            button_container,
             text="Restore",
+            image=load_icon("archive-restore", 16) or "",
+            compound=tk.LEFT,
             width=12,
             state=tk.DISABLED
         )
@@ -190,14 +205,24 @@ class BackupTab(BaseTab):
         self.create_button = ttk.Button(
             input_frame,
             text="Create Backup",
+            image=load_icon("plus", 16) or "",
+            compound=tk.LEFT,
             width=15
         )
         self.create_button.pack(side=tk.RIGHT)
 
+    def _set_default_backup_name(self):
+        """Set the default backup name with current timestamp."""
+        if self.backup_name_var:
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+            default_name = f"Manual_{timestamp}"
+            self.backup_name_var.set(default_name)
+            self.logger.debug(f"Set default backup name: {default_name}")
+
     def get_selected_backup_index(self) -> Optional[int]:
         """Get the index of the currently selected backup."""
         try:
-            selection = self.backup_listbox.curselection()
+            selection = self.backup_listbox.curselection() # type: ignore
             return selection[0] if selection else None
         except (IndexError, AttributeError):
             return None
@@ -210,6 +235,10 @@ class BackupTab(BaseTab):
         """Clear the backup name input field."""
         if self.backup_name_var:
             self.backup_name_var.set("")
+
+    def refresh_default_backup_name(self):
+        """Refresh the backup name field with a new timestamp."""
+        self._set_default_backup_name()
 
     def update_backup_list(self, backup_names: List[str]):
         """Update the backup listbox with new backup names."""

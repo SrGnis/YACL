@@ -78,6 +78,7 @@ class BackupTabController:
             self.event_manager.subscribe(Events.BACKUP_DELETED, self._on_backup_deleted)
             self.event_manager.subscribe(Events.BACKUP_RESTORED, self._on_backup_restored)
             self.event_manager.subscribe(Events.BACKUP_LIST_REFRESHED, self._on_backup_list_refreshed)
+            self.event_manager.subscribe(Events.TAB_CHANGED, self._on_tab_changed)
 
             self.logger.debug("Subscribed to backup events")
 
@@ -92,6 +93,7 @@ class BackupTabController:
             self.event_manager.unsubscribe(Events.BACKUP_DELETED, self._on_backup_deleted)
             self.event_manager.unsubscribe(Events.BACKUP_RESTORED, self._on_backup_restored)
             self.event_manager.unsubscribe(Events.BACKUP_LIST_REFRESHED, self._on_backup_list_refreshed)
+            self.event_manager.unsubscribe(Events.TAB_CHANGED, self._on_tab_changed)
 
             self.logger.debug("Unsubscribed from backup events")
 
@@ -175,7 +177,7 @@ class BackupTabController:
         for unit in ['B', 'KB', 'MB', 'GB']:
             if size_bytes < 1024.0:
                 return f"{size_bytes:.1f} {unit}"
-            size_bytes /= 1024.0
+            size_bytes /= 1024.0 # type: ignore
         return f"{size_bytes:.1f} TB"
 
     def _on_backup_selected(self, event=None):
@@ -285,8 +287,11 @@ class BackupTabController:
     def _on_current_game_type_changed(self, sender, **kwargs):
         """Handle current game type changed event."""
         try:
-            old_game_type = kwargs.get('old_game_type')
-            new_game_type = kwargs.get('new_game_type')
+            old_game_type: Optional[GameType] = kwargs.get('old_game_type')
+            new_game_type: Optional[GameType] = kwargs.get('new_game_type')
+
+            if not new_game_type or not old_game_type or not isinstance(new_game_type, GameType) or not isinstance(old_game_type, GameType):
+                return
             
             self.logger.info(f"Game type changed from {old_game_type.name if old_game_type else 'None'} to {new_game_type.name}")
             
@@ -340,6 +345,18 @@ class BackupTabController:
 
         except Exception as e:
             self.logger.error(f"Error handling backup list refreshed event: {e}")
+
+    def _on_tab_changed(self, sender, **kwargs):
+        """Handle tab changed event - refresh backup name when backup tab becomes active."""
+        try:
+            new_tab = kwargs.get('tab')
+            if new_tab == 'backups':
+                # Refresh the default backup name with current timestamp when tab becomes active
+                self.view.refresh_default_backup_name()
+                self.logger.debug("Refreshed backup name placeholder for backup tab")
+
+        except Exception as e:
+            self.logger.error(f"Error handling tab changed event: {e}")
 
     def shutdown(self):
         """Shutdown the controller and clean up resources."""
