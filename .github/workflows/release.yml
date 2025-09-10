@@ -3,7 +3,8 @@ name: Build and Release YACL
 on:
   push:
     tags:
-      - 'v*.*.*'  # Triggers on semantic version tags like v1.0.0, v1.2.3, etc.
+      - 'v*.*.*'      # Triggers on stable release tags like v1.0.0, v1.2.3, etc.
+      - 'dev-v*.*.*'  # Triggers on prerelease tags like dev-v1.0.0, dev-v1.2.3, etc.
 
 env:
   PYTHON_VERSION: '3.11'
@@ -16,7 +17,13 @@ jobs:
       version: ${{ steps.get_version.outputs.version }}
       is_prerelease: ${{ steps.check_prerelease.outputs.is_prerelease }}
       release_name: ${{ steps.get_version.outputs.release_name }}
+      semantic_version: ${{ steps.get_version.outputs.semantic_version }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history to determine source branch
+
       - name: Get version from tag
         id: get_version
         run: |
@@ -25,16 +32,34 @@ jobs:
           echo "release_name=YACL $VERSION" >> $GITHUB_OUTPUT
           echo "Extracted version: $VERSION"
 
+          # Extract semantic version (remove dev- prefix if present)
+          if [[ "$VERSION" =~ ^dev-v(.+)$ ]]; then
+            SEMANTIC_VERSION="v${BASH_REMATCH[1]}"
+          else
+            SEMANTIC_VERSION="$VERSION"
+          fi
+          echo "semantic_version=$SEMANTIC_VERSION" >> $GITHUB_OUTPUT
+          echo "Semantic version: $SEMANTIC_VERSION"
+
       - name: Check if prerelease
         id: check_prerelease
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
-          if [[ "$VERSION" =~ (alpha|beta|rc|dev|pre) ]]; then
+
+          # Determine the source branch for this tag
+          SOURCE_BRANCH=$(git branch -r --contains $GITHUB_SHA | grep -v HEAD | head -1 | sed 's/.*\///')
+          echo "Source branch: $SOURCE_BRANCH"
+
+          # Check if this is a prerelease based on tag format and source branch
+          if [[ "$VERSION" =~ ^dev-v ]]; then
             echo "is_prerelease=true" >> $GITHUB_OUTPUT
-            echo "This is a prerelease version"
+            echo "This is a prerelease version (dev- prefix detected)"
+          elif [[ "$SOURCE_BRANCH" != "main" ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            echo "This is a prerelease version (not from main branch: $SOURCE_BRANCH)"
           else
             echo "is_prerelease=false" >> $GITHUB_OUTPUT
-            echo "This is a stable release"
+            echo "This is a stable release (from main branch)"
           fi
 
   # Build for Linux
@@ -187,8 +212,23 @@ jobs:
         id: release_notes
         run: |
           VERSION=${{ needs.prepare-release.outputs.version }}
+          IS_PRERELEASE=${{ needs.prepare-release.outputs.is_prerelease }}
+          SEMANTIC_VERSION=${{ needs.prepare-release.outputs.semantic_version }}
+
           echo "Release $VERSION" > release_notes.md
           echo "" >> release_notes.md
+
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            echo "⚠️ **This is a prerelease version** - Use for testing purposes only." >> release_notes.md
+            echo "" >> release_notes.md
+            if [[ "$VERSION" =~ ^dev-v ]]; then
+              echo "This prerelease was built from a development branch and includes experimental features." >> release_notes.md
+            else
+              echo "This prerelease was built from a non-main branch." >> release_notes.md
+            fi
+            echo "" >> release_notes.md
+          fi
+
           echo "## Downloads" >> release_notes.md
           echo "- **Linux**: Download yacl_linux.tar.gz for Linux systems" >> release_notes.md
           echo "- **Windows**: Download yacl_windows.zip for Windows systems" >> release_notes.md
