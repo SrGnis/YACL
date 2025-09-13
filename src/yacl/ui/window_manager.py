@@ -38,10 +38,10 @@ class WindowManager:
 
         # Default window configuration
         self.default_config = {
-            'width': 1200,
-            'height': 800,
+            'width': 800,
+            'height': 900,
             'min_width': 800,
-            'min_height': 600,
+            'min_height': 900,
             'x_pos': -1,  # -1 means center
             'y_pos': -1,  # -1 means center
             'maximized': False,

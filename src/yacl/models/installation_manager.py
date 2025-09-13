@@ -52,9 +52,325 @@ class InstallationManager:
         # Shutdown flag to signal threads to stop
         self.is_shutting_down = False
 
+        # Current game type state
+        self.current_game_type: GameType = GameType.all[0]
+
+        # Cache for active installations (GameType -> installation_name)
+        self.active_installations: Dict[GameType, str] = {}
+
         self._subscribe_to_events()
 
+        # Initialize game type from settings
+        self._initialize_game_type_from_settings()
+
+        # Initialize active installations cache from settings
+        self._initialize_active_installations_from_settings()
+
         self.reload_installed_games()
+
+    def _initialize_game_type_from_settings(self):
+        """Initialize the current game type from settings."""
+        try:
+            settings = get_settings()
+            game_setting = settings.read("game", GameType.all[0].name)
+            self.current_game_type = GameType.get_game_type_by_name(game_setting)
+            self.logger.debug(f"Initialized game type from settings: {self.current_game_type.name}")
+
+        except Exception as e:
+            self.logger.error(f"Error initializing game type from settings: {e}")
+            self.current_game_type = GameType.all[0]
+
+    def _initialize_active_installations_from_settings(self):
+        """Initialize the active installations cache from settings."""
+        try:
+            settings = get_settings()
+
+            # Load active installation for each game type
+            for game_type in GameType.all:
+                active_install = settings.read(f"active_install_{game_type.name}", "")
+                if active_install:
+                    self.active_installations[game_type] = active_install
+
+            self.logger.debug(f"Initialized active installations cache: {len(self.active_installations)} entries")
+
+        except Exception as e:
+            self.logger.error(f"Error initializing active installations from settings: {e}")
+            self.active_installations = {}
+
+    def _persist_active_installations_to_settings(self):
+        """Persist the active installations cache to settings."""
+        try:
+            settings = get_settings()
+
+            # Save active installation for each game type
+            for game_type in GameType.all:
+                if game_type in self.active_installations:
+                    settings.store(f"active_install_{game_type.name}", self.active_installations[game_type])
+                else:
+                    settings.store(f"active_install_{game_type.name}", "")
+
+            self.logger.debug(f"Persisted active installations cache: {len(self.active_installations)} entries")
+
+        except Exception as e:
+            self.logger.error(f"Error persisting active installations to settings: {e}")
+
+    def get_current_game_type(self) -> GameType:
+        """
+        Get the currently selected game type.
+
+        Returns:
+            GameType: The current game type
+        """
+        return self.current_game_type
+
+    def set_current_game_type(self, game_type: GameType) -> bool:
+        """
+        Set the current game type and emit change event.
+
+        Args:
+            game_type: The game type to set as current
+
+        Returns:
+            bool: True if successfully set
+        """
+        try:
+            if game_type == self.current_game_type:
+                return True  # No change needed
+
+            old_game_type = self.current_game_type
+            self.current_game_type = game_type
+
+            # Update settings
+            try:
+                settings = get_settings()
+                settings.store("game", self.current_game_type.name)
+            except RuntimeError:
+                # Settings not initialized, skip
+                self.logger.debug("Settings not initialized, skipping game type storage")
+                pass
+
+            # Emit game type changed event
+            if self.event_manager:
+                self.event_manager.emit(Events.CURRENT_GAME_TYPE_CHANGED,
+                                      old_game_type=old_game_type,
+                                      new_game_type=self.current_game_type)
+
+            self.logger.info(f"Game type changed from {old_game_type.name} to {self.current_game_type.name}")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Error setting current game type: {e}")
+            return False
+
+    def get_active_installation(self, game_type: Optional[GameType] = None) -> Optional[GameInstallation]:
+        """
+        Get the currently active installation for a game type.
+
+        Args:
+            game_type: Game type to get active installation for. If None, uses current game type.
+
+        Returns:
+            GameInstallation: Active installation object or None if none set
+        """
+        try:
+            if game_type is None:
+                game_type = self.current_game_type
+
+            # Use cached value instead of reading from settings
+            active_install_name = self.active_installations.get(game_type)
+
+            # Validate that the active installation still exists
+            if active_install_name and game_type in self.installed_games:
+                if active_install_name in self.installed_games[game_type]:
+                    return self.installed_games[game_type][active_install_name]
+                else:
+                    # Active installation no longer exists, clear it
+                    self.logger.warning(f"Active installation '{active_install_name}' no longer exists for {game_type.name}, clearing")
+                    self.clear_active_installation(game_type)
+
+            return None
+
+        except Exception as e:
+            self.logger.error(f"Error getting active installation for {game_type.name if game_type else 'current'}: {e}")
+            return None
+
+    def get_active_installation_name(self, game_type: Optional[GameType] = None) -> Optional[str]:
+        """
+        Get the name of the currently active installation for a game type.
+
+        Args:
+            game_type: Game type to get active installation for. If None, uses current game type.
+
+        Returns:
+            str: Name of active installation or None if none set
+        """
+        active_installation = self.get_active_installation(game_type)
+        return active_installation.name if active_installation else None
+
+    def set_active_installation(self, installation: GameInstallation, game_type: Optional[GameType] = None) -> bool:
+        """
+        Set the active installation for a game type.
+
+        Args:
+            installation: GameInstallation object to make active
+            game_type: Game type to set active installation for. If None, uses installation's game type.
+
+        Returns:
+            bool: True if successfully set
+        """
+        try:
+            if game_type is None:
+                game_type = installation.game_type
+
+            # Verify the installation exists
+            if game_type not in self.installed_games or installation.name not in self.installed_games[game_type]:
+                self.logger.warning(f"Installation '{installation.name}' not found for {game_type.name}")
+                return False
+
+            # Get current active installation for event
+            old_active = self.get_active_installation(game_type)
+
+            # Update cache instead of directly writing to settings
+            self.active_installations[game_type] = installation.name
+
+            # Emit active installation changed event
+            if self.event_manager:
+                self.event_manager.emit(Events.ACTIVE_INSTALLATION_CHANGED,
+                                      game_type=game_type,
+                                      old_active=old_active,
+                                      new_active=installation,
+                                      reason="user_selection")
+
+            self.logger.info(f"Set active installation for {game_type.name}: {installation.name}")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Error setting active installation: {e}")
+            return False
+
+    def set_active_installation_by_name(self, installation_name: str, game_type: Optional[GameType] = None) -> bool:
+        """
+        Set the active installation for a game type by name (backward compatibility).
+
+        Args:
+            installation_name: Name of the installation to make active
+            game_type: Game type to set active installation for. If None, uses current game type.
+
+        Returns:
+            bool: True if successfully set
+        """
+        try:
+            if game_type is None:
+                game_type = self.current_game_type
+
+            # Find the installation object
+            if game_type not in self.installed_games or installation_name not in self.installed_games[game_type]:
+                self.logger.warning(f"Installation '{installation_name}' not found for {game_type.name}")
+                return False
+
+            installation = self.installed_games[game_type][installation_name]
+            return self.set_active_installation(installation, game_type)
+
+        except Exception as e:
+            self.logger.error(f"Error setting active installation by name: {e}")
+            return False
+
+    def get_active_installation_info(self, game_type: Optional[GameType] = None) -> Optional[GameInstallation]:
+        """
+        Get the full GameInstallation object for the active installation.
+
+        Args:
+            game_type: Game type to get active installation for. If None, uses current game type.
+
+        Returns:
+            GameInstallation: The active installation object or None if none set
+        """
+        try:
+            if game_type is None:
+                game_type = self.current_game_type
+
+            # get_active_installation now returns GameInstallation object directly
+            return self.get_active_installation(game_type)
+
+        except Exception as e:
+            self.logger.error(f"Error getting active installation info: {e}")
+            return None
+
+    def clear_active_installation(self, game_type: Optional[GameType] = None) -> bool:
+        """
+        Clear the active installation for a game type.
+
+        Args:
+            game_type: Game type to clear active installation for. If None, uses current game type.
+
+        Returns:
+            bool: True if successfully cleared
+        """
+        try:
+            if game_type is None:
+                game_type = self.current_game_type
+
+            # Get current active installation for event
+            old_active = self.get_active_installation(game_type)
+
+            # Clear from cache
+            if game_type in self.active_installations:
+                del self.active_installations[game_type]
+
+            # Emit active installation changed event
+            if self.event_manager and old_active:
+                self.event_manager.emit(Events.ACTIVE_INSTALLATION_CHANGED,
+                                      game_type=game_type,
+                                      old_active=old_active,
+                                      new_active=None,
+                                      reason="cleared")
+
+            self.logger.info(f"Cleared active installation for {game_type.name}")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Error clearing active installation: {e}")
+            return False
+
+    def auto_set_active_installation(self, game_type: Optional[GameType] = None, prefer_name: Optional[str] = None) -> Optional[str]:
+        """
+        Automatically set an active installation using smart selection logic.
+
+        Args:
+            game_type: Game type to set active installation for. If None, uses current game type.
+            prefer_name: Preferred installation name to select if available
+
+        Returns:
+            str: Name of the newly active installation or None if no installations available
+        """
+        try:
+            if game_type is None:
+                game_type = self.current_game_type
+
+            if game_type not in self.installed_games or not self.installed_games[game_type]:
+                # No installations available
+                self.clear_active_installation(game_type)
+                return None
+
+            installations = self.installed_games[game_type]
+
+            # Try preferred name first
+            if prefer_name and prefer_name in installations:
+                installation = installations[prefer_name]
+                if self.set_active_installation(installation, game_type):
+                    return prefer_name
+
+            # Fall back to first available installation
+            first_installation_name = list(installations.keys())[0]
+            first_installation = installations[first_installation_name]
+            if self.set_active_installation(first_installation, game_type):
+                return first_installation_name
+
+            return None
+
+        except Exception as e:
+            self.logger.error(f"Error auto-setting active installation: {e}")
+            return None
 
     def _subscribe_to_events(self):
         """Subscribe to events to handle installation flow continuation."""
@@ -378,12 +694,11 @@ class InstallationManager:
             paths = get_paths()
             
             if update_existing:
-                # Try to find existing installation
-                settings = get_settings()
-                active_install = settings.read(f"active_install_{game_type.name}", "")
-                
-                if active_install:
-                    return self.installed_games[game_type][active_install].install_path
+                # Try to find existing installation using centralized method
+                active_install_info = self.get_active_installation_info(game_type)
+
+                if active_install_info:
+                    return active_install_info.install_path
             
             # Create new installation directory
             game_dir = paths.games_dir / game_type.name
@@ -600,8 +915,7 @@ class InstallationManager:
                 }
 
             # Check if this is the active installation
-            settings = get_settings()
-            active_install = settings.read(f"active_install_{game_type.name}", "")
+            active_install = self.get_active_installation(game_type)
             was_active = (active_install == install_name)
 
             # Remove the installation
@@ -612,16 +926,11 @@ class InstallationManager:
             # reload installed games
             self.reload_installed_games()
 
-            # Handle active installation management
+            # Handle active installation management using centralized methods
             new_active = None
             if was_active:
-                if (game_type in self.installed_games and self.installed_games[game_type]):
-                    # Set the first remaining installation as active
-                    new_active = list(self.installed_games[game_type].keys())[0]
-                    settings.store(f"active_install_{game_type.name}", new_active)
-                else:
-                    # No installations left, clear active
-                    settings.store(f"active_install_{game_type.name}", "")
+                # Use auto-selection to set new active installation
+                new_active = self.auto_set_active_installation(game_type)
 
             return {
                 "success": True,
@@ -668,6 +977,9 @@ class InstallationManager:
             self.logger.info("Shutting down installation manager...")
 
             self.is_shutting_down = True
+
+            # Persist cached data to settings before shutdown
+            self._persist_active_installations_to_settings()
 
             self._unsubscribe_from_events()
 

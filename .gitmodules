@@ -2,3 +2,6 @@
 	path = src/yacl/resources/assets/themes/Azure-ttk-theme
 	url = https://github.com/rdbende/Azure-ttk-theme.git
 	branch = main
+[submodule "src/yacl/resources/assets/lucide-icons"]
+	path = src/yacl/resources/assets/lucide-icons
+	url = https://github.com/lucide-icons/lucide.git

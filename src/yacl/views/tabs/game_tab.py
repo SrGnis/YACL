@@ -12,6 +12,7 @@ from tkinter import ttk
 
 from yacl.ui.widgets.base_tab import BaseTab
 from yacl.services.events import EventManager
+from yacl.services.icon_service import load_icon
 from yacl.models.game_type import GameType
 
 
@@ -64,20 +65,23 @@ class GameTab(BaseTab):
 
         self.logger.info("Game tab view initialized")
 
+    
+
     def _create_tab_content(self):
         if not self.scrollable_frame:
             self.logger.error("Scrollable frame not available")
             return
 
         try:
-            # Create sections
+
+            # Game selection section
             self._create_game_selection_section(self.scrollable_frame)
 
-            self._create_release_section(self.scrollable_frame)
-
-            self._create_active_install_section(self.scrollable_frame)
-
+            # Create installations section
             self._create_installations_section(self.scrollable_frame)
+
+            # Release management section
+            self._create_release_section(self.scrollable_frame)
 
         except Exception as e:
             self.logger.error(f"Failed to create game tab content: {e}")
@@ -102,6 +106,105 @@ class GameTab(BaseTab):
         )
         self.game_selector.set(GameType.all[0].display_name)
         self.game_selector.pack(side=tk.RIGHT)
+
+    def _create_installations_section(self, parent_frame: ttk.Frame):
+        """Create the merged installations section with active installation and list."""
+        install_frame = self.create_section_frame(parent_frame, "Installations")
+
+        # Active installation display
+        active_info_frame = ttk.Frame(install_frame)
+        active_info_frame.pack(fill=tk.X, pady=(0, 5))
+
+        ttk.Label(active_info_frame, text="Current Active:").pack(side=tk.LEFT)
+
+        self.active_install_label = ttk.Label(
+            active_info_frame,
+            text="No active installation",
+            font=("TkDefaultFont", 9, "bold")
+        )
+        self.active_install_label.pack(side=tk.RIGHT)
+
+        # Play game buttons
+        play_frame = ttk.Frame(install_frame)
+        play_frame.pack(fill=tk.X, pady=(0, 10))
+
+        # Center container frame for buttons
+        center_frame = ttk.Frame(play_frame)
+        center_frame.pack(expand=True)
+
+        self.play_button = ttk.Button(
+            center_frame,
+            text="Launch Game",
+            image=load_icon("play", 16) or "",
+            compound=tk.LEFT,
+            state=tk.DISABLED
+        )
+        self.play_button.pack(side=tk.LEFT)
+
+        self.resume_button = ttk.Button(
+            center_frame,
+            text="Resume Game",
+            image=load_icon("skip-forward", 16) or "",
+            compound=tk.LEFT,
+            state=tk.DISABLED
+        )
+        self.resume_button.pack(side=tk.LEFT, padx=(10, 0))
+
+        # Installations list header
+        list_header_frame = ttk.Frame(install_frame)
+        list_header_frame.pack(fill=tk.X, pady=(0, 2))
+
+        ttk.Label(list_header_frame, text="Installed Versions:").pack(side=tk.LEFT)
+
+        self.refresh_installations_button = ttk.Button(
+            list_header_frame,
+            text="Refresh",
+            image=load_icon("refresh-cw", 14) or "",
+            compound=tk.LEFT
+        )
+        self.refresh_installations_button.pack(side=tk.RIGHT)
+
+        # Installations list
+        list_frame = ttk.Frame(install_frame)
+        list_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 5))
+
+        # Create listbox with scrollbar
+        self.installations_listbox = tk.Listbox(
+            list_frame,
+            height=4,
+            selectmode=tk.SINGLE
+        )
+        self.installations_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Scrollbar for installations listbox
+        installs_scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL)
+        installs_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Connect scrollbar to listbox
+        self.installations_listbox.config(yscrollcommand=installs_scrollbar.set)
+        installs_scrollbar.config(command=self.installations_listbox.yview)
+
+        # Installation management buttons
+        buttons_frame = ttk.Frame(install_frame)
+        buttons_frame.pack(fill=tk.X)
+
+        self.activate_button = ttk.Button(
+            buttons_frame,
+            text="Set Active",
+            image=load_icon("check", 14) or "",
+            compound=tk.LEFT,
+            state=tk.DISABLED
+        )
+        self.activate_button.pack(side=tk.LEFT)
+
+        self.delete_button = ttk.Button(
+            buttons_frame,
+            text="Delete",
+            image=load_icon("trash-2", 14) or "",
+            compound=tk.LEFT,
+            state=tk.DISABLED
+        )
+        self.delete_button.pack(side=tk.LEFT, padx=(10, 0))
     
     def _create_release_section(self, parent_frame: ttk.Frame):
         """Create the release selection section with channel selection."""
@@ -146,7 +249,9 @@ class GameTab(BaseTab):
 
         self.refresh_button = ttk.Button(
             list_header_frame,
-            text="Refresh"
+            text="Refresh",
+            image=load_icon("refresh-cw", 14) or "",
+            compound=tk.LEFT
         )
         self.refresh_button.pack(side=tk.RIGHT, padx=(0, 2))
 
@@ -162,6 +267,8 @@ class GameTab(BaseTab):
         self.clear_search_button = ttk.Button(
             list_header_frame,
             text="Clear",
+            image=load_icon("x", 12) or "",
+            compound=tk.LEFT,
             width=6
         )
         self.clear_search_button.pack(side=tk.RIGHT, padx=(0, 2))
@@ -195,6 +302,8 @@ class GameTab(BaseTab):
         self.install_button = ttk.Button(
             install_controls_frame,
             text="Install Selected",
+            image=load_icon("download", 16) or "",
+            compound=tk.LEFT,
             state=tk.DISABLED
         )
         self.install_button.pack(side=tk.LEFT)
@@ -207,99 +316,6 @@ class GameTab(BaseTab):
             variable=self.update_var
         )
         self.update_checkbox.pack(side=tk.LEFT, padx=(15, 0))
-    
-    def _create_active_install_section(self, parent_frame: ttk.Frame):
-        """Create the active installation section."""
-        install_frame = self.create_section_frame(parent_frame, "Active Installation")
-
-        # Active installation display
-        active_info_frame = ttk.Frame(install_frame)
-        active_info_frame.pack(fill=tk.X, pady=(0, 5))
-
-        ttk.Label(active_info_frame, text="Current Active:").pack(side=tk.LEFT)
-
-        self.active_install_label = ttk.Label(
-            active_info_frame,
-            text="No active installation",
-            font=("TkDefaultFont", 9, "bold")
-        )
-        self.active_install_label.pack(side=tk.RIGHT)
-
-        # Play game button
-        play_frame = ttk.Frame(install_frame)
-        play_frame.pack(fill=tk.X, pady=(0, 5))
-
-        self.play_button = ttk.Button(
-            play_frame,
-            text="Launch Game",
-            state=tk.DISABLED
-        )
-        self.play_button.pack(side=tk.LEFT)
-
-        # Resume game button
-        self.resume_button = ttk.Button(
-            play_frame,
-            text="Resume Game",
-            state=tk.DISABLED
-        )
-        self.resume_button.pack(side=tk.LEFT, padx=(10, 0))
-    
-    def _create_installations_section(self, parent_frame: ttk.Frame):
-        """Create the installations management section."""
-        installations_frame = self.create_section_frame(parent_frame, "Installations")
-
-        # Installations list header
-        list_header_frame = ttk.Frame(installations_frame)
-        list_header_frame.pack(fill=tk.X, pady=(0, 2))
-
-        ttk.Label(list_header_frame, text="Installed Versions:").pack(side=tk.LEFT)
-
-        # Refresh installations button
-        self.refresh_installations_button = ttk.Button(
-            list_header_frame,
-            text="Refresh"
-        )
-        self.refresh_installations_button.pack(side=tk.RIGHT)
-
-        # Installations list
-        list_frame = ttk.Frame(installations_frame)
-        list_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 5))
-
-        # Create listbox with scrollbar
-        self.installations_listbox = tk.Listbox(
-            list_frame,
-            height=4,
-            selectmode=tk.SINGLE
-        )
-        self.installations_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        # Scrollbar for installations listbox
-        installs_scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL)
-        installs_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        # Connect scrollbar to listbox
-        self.installations_listbox.config(yscrollcommand=installs_scrollbar.set)
-        installs_scrollbar.config(command=self.installations_listbox.yview)
-
-        # Selection event will be bound by controller
-
-        # Installation management buttons
-        buttons_frame = ttk.Frame(installations_frame)
-        buttons_frame.pack(fill=tk.X)
-
-        self.activate_button = ttk.Button(
-            buttons_frame,
-            text="Set Active",
-            state=tk.DISABLED
-        )
-        self.activate_button.pack(side=tk.LEFT)
-
-        self.delete_button = ttk.Button(
-            buttons_frame,
-            text="Delete",
-            state=tk.DISABLED
-        )
-        self.delete_button.pack(side=tk.LEFT, padx=(10, 0))
 
     def get_selected_game(self) -> Optional[str]:
         return self.game_selector.get()

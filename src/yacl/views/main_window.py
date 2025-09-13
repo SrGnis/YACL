@@ -64,7 +64,7 @@ class MainWindow:
             #'mods': {'label': 'Mods', 'enabled': False},
             #'soundpacks': {'label': 'Soundpacks', 'enabled': False},
             #'fonts': {'label': 'Fonts', 'enabled': False},
-            #'backups': {'label': 'Backups', 'enabled': False},
+            'backups': {'label': 'Backups', 'enabled': True},
             'settings': {'label': 'Settings', 'enabled': True},
         }
 
@@ -226,10 +226,34 @@ class MainWindow:
         ttk.Label(tab_frame, text="Font management functionality will be implemented here.").pack(pady=20)
 
     def _create_backups_tab_content(self, tab_frame: ttk.Frame):
-        """Create content for the backups tab."""
-        ttk.Label(tab_frame, text="Backup Management", font=('TkDefaultFont', 12, 'bold')).pack(pady=10)
-        ttk.Separator(tab_frame, orient='horizontal').pack(fill=tk.X, pady=5)
-        ttk.Label(tab_frame, text="Backup management functionality will be implemented here.").pack(pady=20)
+        """Create content for the backups tab with MVC pattern."""
+        try:
+            from yacl.views.tabs.backup_tab import BackupTab
+            from yacl.controllers.backup_tab_controller import BackupTabController
+
+            backup_tab_view = BackupTab(parent_frame=tab_frame, event_manager=self.event_manager)
+            backup_tab_view.create_ui()
+
+            backup_tab_controller = BackupTabController(view=backup_tab_view, event_manager=self.event_manager)
+
+            # Store references for cleanup
+            self._tab_instances['backups'] = {
+                'view': backup_tab_view,
+                'controller': backup_tab_controller
+            }
+
+            # Initialize the UI
+            backup_tab_controller.refresh_ui()
+
+            self.logger.info("Backup tab created successfully")
+
+        except Exception as e:
+            self.logger.error(f"Failed to create backup tab: {e}")
+            # Fallback UI
+            ttk.Label(tab_frame, text="Backup Management", font=('TkDefaultFont', 12, 'bold')).pack(pady=10)
+            ttk.Separator(tab_frame, orient='horizontal').pack(fill=tk.X, pady=5)
+            ttk.Label(tab_frame, text="Failed to load backup tab. Please check the logs.").pack(pady=5)
+            ttk.Label(tab_frame, text=f"Error: {e}", foreground='red').pack(pady=5)
     
     def _create_settings_tab_content(self, tab_frame: ttk.Frame):
         """Create content for the settings tab with MVC pattern."""
@@ -267,7 +291,7 @@ class MainWindow:
 
             ttk.Label(header_frame, text="Status Log:", font=('TkDefaultFont', 9, 'bold')).pack(side=tk.LEFT)
 
-            self.version_text = ttk.Label(header_frame, text="YACL v0.0.1")
+            self.version_text = ttk.Label(header_frame, text="YACL")
             self.version_text.pack(side=tk.RIGHT)
 
             log_frame = ttk.Frame(self.status_frame)
