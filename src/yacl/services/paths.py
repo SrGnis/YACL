@@ -38,12 +38,15 @@ class PathManager:
         self.mods_dir: Path
         self.soundpacks_dir: Path
         self.fonts_dir: Path
-        self.backups_dir: Path
         
         # Utility directories
         self.db_dir: Path
         self.temp_dir: Path
         self.logs_dir: Path
+
+        # Templates
+        self._backups_dir_template: Path
+        self._saves_dir_template: Path
 
         self._is_initialized = False
     
@@ -89,13 +92,16 @@ class PathManager:
         self.mods_dir = self.user_data_dir / "mods"
         self.soundpacks_dir = self.user_data_dir / "soundpacks"
         self.fonts_dir = self.user_data_dir / "fonts"
-        self.backups_dir = self.user_data_dir / "backups"
         
         # Set up utility directories
         self.db_dir = self.cache_dir / "db"
         self.temp_dir = self.cache_dir / "temp"
         self.logs_dir = self.app_dir / "logs"
-    
+
+        # Templates
+        self._backups_dir_template = self.games_dir / "{game}" / "backups"
+        self._saves_dir_template = self.games_dir / "{game}" / "userdata" / "save"
+
     def _create_directory_structure(self):
         """Create the directory structure."""
         directories = [
@@ -107,7 +113,6 @@ class PathManager:
             self.mods_dir,
             self.soundpacks_dir,
             self.fonts_dir,
-            self.backups_dir,
             self.db_dir,
             self.temp_dir,
             self.logs_dir,
@@ -182,7 +187,19 @@ class PathManager:
         Returns:
             Path: Path to the game backup directory
         """
-        return self.backups_dir / game
+        return Path(str(self._backups_dir_template).format(game=game))
+
+    def get_saves_dir(self, game: str) -> Path:
+        """
+        Get the saves directory for a specific game.
+        
+        Args:
+            game: Game identifier (e.g., 'dda', 'bn')
+            
+        Returns:
+            Path: Path to the game saves directory
+        """
+        return Path(str(self._saves_dir_template).format(game=game))
     
     def get_logs_dir(self) -> Path:
         """

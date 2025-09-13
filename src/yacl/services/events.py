@@ -141,6 +141,15 @@ class Events:
     INSTALLATION_REMOVED = "installation_removed"
     ACTIVE_INSTALLATION_CHANGED = "active_installation_changed"
 
+    # Game type events
+    CURRENT_GAME_TYPE_CHANGED = "current_game_type_changed"
+
+    # Backup events
+    BACKUP_CREATED = "backup_created"
+    BACKUP_DELETED = "backup_deleted"
+    BACKUP_RESTORED = "backup_restored"
+    BACKUP_LIST_REFRESHED = "backup_list_refreshed"
+
     # Download events
     DOWNLOAD_STARTED = "download_started"
     DOWNLOAD_FINISHED = "download_finished"
