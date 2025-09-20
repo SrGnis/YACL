@@ -20,6 +20,7 @@ from yacl.services.icon_service import initialize_icon_service, shutdown_icon_se
 from yacl.models.installation_manager import initialize_installation_manager, shutdown_installation_manager
 from yacl.models.release_manager import initialize_release_manager, shutdown_release_manager
 from yacl.models.backup_manager import initialize_backup_manager, shutdown_backup_manager
+from yacl.models.timeline_manager import initialize_timeline_manager, shutdown_timeline_manager
 from yacl.utils.logging_handler import add_event_manager_handler_to_logger
 
 
@@ -289,6 +290,10 @@ class YACLApplication:
                 self.logger.error("Failed to initialize backup manager")
                 return False
 
+            if not initialize_timeline_manager(self.event_manager):
+                self.logger.error("Failed to initialize timeline manager")
+                return False
+
             # TODO: Initialize mod manager
             # TODO: Initialize soundpack manager
             # TODO: Initialize font manager
@@ -427,6 +432,8 @@ class YACLApplication:
             shutdown_release_manager()
 
             shutdown_backup_manager()
+
+            shutdown_timeline_manager()
 
             # Only shutdown database manager if it was initialized
             if self.app_settings.read("enable_cataclysm_db", True):

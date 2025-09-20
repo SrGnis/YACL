@@ -44,3 +44,5 @@ The POC is implemented in `git_worktree_poc.py`. It creates a main repository in
 The implementation is split into two main parts:
 1. **Data Model**: The `yacl.models` package contains all data classes, enums, and exceptions related to save game timelines, we can adapt tose classes to our needs with new attributes or methods.
 2. **Timeline Manager**: The `yacl.models.timeline_manager` module provides the `TimelineManager` class for managing save game timelines.
+
+The `TimelineManager` can use other managers from the `yacl.models` package to get the necessary information to manage the timelines. For example, it can use the `BackupManager` to get the list of save games for each installation. And it can use the path manager to get the paths to the save game folders.

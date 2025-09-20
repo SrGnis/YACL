@@ -65,6 +65,7 @@ class MainWindow:
             #'soundpacks': {'label': 'Soundpacks', 'enabled': False},
             #'fonts': {'label': 'Fonts', 'enabled': False},
             'backups': {'label': 'Backups', 'enabled': True},
+            'timeline': {'label': 'Timeline', 'enabled': True},
             'settings': {'label': 'Settings', 'enabled': True},
         }
 
@@ -176,6 +177,8 @@ class MainWindow:
                 self._create_fonts_tab_content(tab_frame)
             elif tab_id == 'backups':
                 self._create_backups_tab_content(tab_frame)
+            elif tab_id == 'timeline':
+                self._create_timeline_tab_content(tab_frame)
             elif tab_id == 'settings':
                 self._create_settings_tab_content(tab_frame)
             else:
@@ -254,7 +257,37 @@ class MainWindow:
             ttk.Separator(tab_frame, orient='horizontal').pack(fill=tk.X, pady=5)
             ttk.Label(tab_frame, text="Failed to load backup tab. Please check the logs.").pack(pady=5)
             ttk.Label(tab_frame, text=f"Error: {e}", foreground='red').pack(pady=5)
-    
+
+    def _create_timeline_tab_content(self, tab_frame: ttk.Frame):
+        """Create content for the timeline tab with MVC pattern."""
+        try:
+            from yacl.views.tabs.timeline_tab import TimelineTab
+            from yacl.controllers.timeline_tab_controller import TimelineTabController
+
+            timeline_tab_view = TimelineTab(parent_frame=tab_frame, event_manager=self.event_manager)
+            timeline_tab_view.create_ui()
+
+            timeline_tab_controller = TimelineTabController(view=timeline_tab_view, event_manager=self.event_manager)
+
+            # Store references for cleanup
+            self._tab_instances['timeline'] = {
+                'view': timeline_tab_view,
+                'controller': timeline_tab_controller
+            }
+
+            # Initialize the UI
+            timeline_tab_controller.refresh_ui()
+
+            self.logger.info("Timeline tab created successfully")
+
+        except Exception as e:
+            self.logger.error(f"Failed to create timeline tab: {e}", exc_info=True)
+            # Fallback UI
+            ttk.Label(tab_frame, text="Timeline Management", font=('TkDefaultFont', 12, 'bold')).pack(pady=10)
+            ttk.Separator(tab_frame, orient='horizontal').pack(fill=tk.X, pady=5)
+            ttk.Label(tab_frame, text="Failed to load timeline tab. Please check the logs.").pack(pady=5)
+            ttk.Label(tab_frame, text=f"Error: {e}", foreground='red').pack(pady=5)
+
     def _create_settings_tab_content(self, tab_frame: ttk.Frame):
         """Create content for the settings tab with MVC pattern."""
         try:

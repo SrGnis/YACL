@@ -148,6 +148,14 @@ class Events:
     BACKUP_CREATED = "backup_created"
     BACKUP_DELETED = "backup_deleted"
     BACKUP_RESTORED = "backup_restored"
+
+    # Timeline events
+    TIMELINE_CREATED = "timeline_created"
+    TIMELINE_DELETED = "timeline_deleted"
+    CHECKPOINT_CREATED = "checkpoint_created"
+    CHECKPOINT_RESTORED = "checkpoint_restored"
+    BRANCH_CREATED = "branch_created"
+    BRANCH_SWITCHED = "branch_switched"
     BACKUP_LIST_REFRESHED = "backup_list_refreshed"
 
     # Download events
