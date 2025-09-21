@@ -16,7 +16,7 @@ from dulwich import porcelain
 from dulwich.errors import NotGitRepository
 
 from yacl.models.timeline import (
-    Timeline, Checkpoint, TimelineBranch, TimelineStatus, TimelineError,
+    TimelineTree, Checkpoint, Timeline, TimelineStatus, TimelineError,
     TimelineValidationError, TimelineRepositoryError, TimelineCheckpointError,
     TimelineBranchError, TimelineFileError
 )
@@ -48,13 +48,10 @@ class TimelineManager:
         self.paths = get_paths()
 
         # Current state
-        self.timelines: Dict[GameType, Dict[str, Timeline]] = {}
+        self.timelines: Dict[GameType, Dict[str, TimelineTree]] = {}
         self.repositories: Dict[GameType, Optional[Repo]] = {}
 
         self._is_initialized = False
-
-        # Subscribe to relevant events
-        self._subscribe_to_events()
 
         self.logger.info("Timeline manager initialized")
 
@@ -73,8 +70,7 @@ class TimelineManager:
 
             # Initialize repositories for all game types
             for game_type in GameType.all:
-                if game_type != GameType.other:  # Skip 'other' game type
-                    self._initialize_game_repository(game_type)
+                self._initialize_game_repository(game_type)
 
             self._is_initialized = True
             self.logger.info("Timeline manager initialization completed")
@@ -83,106 +79,6 @@ class TimelineManager:
         except Exception as e:
             self.logger.error(f"Failed to initialize timeline manager: {e}")
             return False
-
-    def _subscribe_to_events(self) -> None:
-        """Subscribe to relevant events for timeline management."""
-        try:
-            # Subscribe to installation events to detect new save games
-            self.event_manager.subscribe(Events.INSTALLATION_FINISHED, self._on_installation_finished)
-            self.event_manager.subscribe(Events.ACTIVE_INSTALLATION_CHANGED, self._on_active_installation_changed)
-            self.event_manager.subscribe(Events.CURRENT_GAME_TYPE_CHANGED, self._on_game_type_changed)
-
-            self.logger.debug("Subscribed to timeline management events")
-        except Exception as e:
-            self.logger.error(f"Error subscribing to events: {e}")
-
-    def _unsubscribe_from_events(self) -> None:
-        """Unsubscribe from events."""
-        try:
-            self.event_manager.unsubscribe(Events.INSTALLATION_FINISHED, self._on_installation_finished)
-            self.event_manager.unsubscribe(Events.ACTIVE_INSTALLATION_CHANGED, self._on_active_installation_changed)
-            self.event_manager.unsubscribe(Events.CURRENT_GAME_TYPE_CHANGED, self._on_game_type_changed)
-
-            self.logger.debug("Unsubscribed from timeline management events")
-        except Exception as e:
-            self.logger.error(f"Error unsubscribing from events: {e}")
-
-    def _on_installation_finished(self, **kwargs) -> None:
-        """Handle installation finished event."""
-        try:
-            release = kwargs.get('release')
-            success = kwargs.get('success', False)
-
-            if success and release:
-                self.logger.info(f"Installation finished for {release.game_type.name}, scanning for save games")
-                self._scan_for_save_games(release.game_type)
-        except Exception as e:
-            self.logger.error(f"Error handling installation finished event: {e}")
-
-    def _on_active_installation_changed(self, **kwargs) -> None:
-        """Handle active installation changed event."""
-        try:
-            game_type = kwargs.get('game_type')
-            if game_type:
-                self.logger.info(f"Active installation changed for {game_type.name}, rescanning save games")
-                self._scan_for_save_games(game_type)
-        except Exception as e:
-            self.logger.error(f"Error handling active installation changed event: {e}")
-
-    def _on_game_type_changed(self, **kwargs) -> None:
-        """Handle game type changed event."""
-        try:
-            game_type = kwargs.get('game_type')
-            if game_type:
-                self.logger.info(f"Game type changed to {game_type.name}, loading timelines")
-                self.load_timelines(game_type)
-        except Exception as e:
-            self.logger.error(f"Error handling game type changed event: {e}")
-
-    def _scan_for_save_games(self, game_type: GameType) -> None:
-        """
-        Scan for save games in the saves directory and create timelines as needed.
-
-        Args:
-            game_type: The game type to scan for
-        """
-        try:
-            saves_dir = self.paths.get_saves_dir(game_type.name)
-
-            if not saves_dir.exists():
-                self.logger.debug(f"Saves directory does not exist for {game_type.name}")
-                return
-
-            # Ensure repository is initialized for this game type
-            if game_type not in self.repositories or not self.repositories[game_type]:
-                self._initialize_game_repository(game_type)
-
-            # Scan for save game directories
-            for save_dir in saves_dir.iterdir():
-                if save_dir.is_dir() and save_dir.name != ".git":
-                    save_name = save_dir.name
-
-                    # Check if timeline already exists
-                    if (game_type in self.timelines and
-                        save_name in self.timelines[game_type]):
-                        continue
-
-                    # Create SaveGame object for timeline creation
-                    save_game = SaveGame(
-                        name=save_name,
-                        game=game_type,
-                        path=save_dir
-                    )
-
-                    # Create timeline if save game has files
-                    if any(save_dir.iterdir()):
-                        self.logger.info(f"Found new save game: {save_name}")
-                        timeline = self.create_timeline(save_game)
-                        if timeline:
-                            self.logger.info(f"Created timeline for save game: {save_name}")
-
-        except Exception as e:
-            self.logger.error(f"Error scanning for save games in {game_type.name}: {e}")
 
     def _validate_save_game(self, save_game: SaveGame) -> None:
         """
@@ -357,7 +253,7 @@ class TimelineManager:
                 self.logger.info(f"Found existing Git repository for {game_type.name}")
 
                 # Load existing timelines
-                self._load_existing_timelines(game_type, repo)
+                self._load_existing_timeline_trees(game_type, repo)
 
             except NotGitRepository:
                 # Initialize new repository
@@ -365,8 +261,9 @@ class TimelineManager:
                 repo = porcelain.init(str(saves_dir))
                 self.repositories[game_type] = repo
 
-                # Create initial commit
-                self._create_initial_commit(repo, saves_dir)
+                # Create a first empty commit
+                porcelain.commit(repo.path, message="Initial commit".encode())
+                self.logger.info(f"Created initial commit for {game_type.name}")
 
             return True
 
@@ -374,166 +271,51 @@ class TimelineManager:
             self.logger.error(f"Failed to initialize repository for {game_type.name}: {e}")
             return False
 
-    def _create_initial_commit(self, repo: Repo, saves_dir: Path) -> None:
-        """
-        Create initial commit in the repository.
 
-        Args:
-            repo: The Git repository
-            saves_dir: The saves directory path
+    def _load_existing_timeline_trees(self, game_type: GameType, repo: Repo) -> None:
         """
-        # Create a simple README file for initial commit
-        readme_path = saves_dir / "README.md"
-        with open(readme_path, "w") as f:
-            f.write("# YACL Timeline Management\n\nThis repository manages save game timelines.\n")
-
-        # Stage and commit using dulwich
-        worktree = repo.get_worktree()
-        worktree.stage(["README.md"])
-        worktree.commit(message=b"Initial commit - YACL Timeline Management")
-
-    def _load_existing_timelines(self, game_type: GameType, repo: Repo) -> None:
-        """
-        Load existing timelines from a Git repository.
+        Load existing timeline trees from a Git repository.
 
         Args:
             game_type: The game type
             repo: The Git repository
         """
         try:
+            self.logger.debug(f"Loading existing timeline trees for {game_type.name}")
+            self.logger.debug(f"Repository path: {repo.path}")
+
             # Get all worktrees
             worktrees = porcelain.worktree_list(str(repo.path))
+            self.logger.debug(f"Found {len(worktrees)} worktrees")
 
             for worktree_info in worktrees:
                 worktree_path = Path(worktree_info.path)
+                self.logger.debug(f"Processing worktree: {worktree_path}")
 
                 # Skip the main repository directory
                 if worktree_path == Path(repo.path):
+                    self.logger.debug("Skipping main repository directory")
                     continue
 
                 # Extract save game name from worktree path
                 save_name = worktree_path.name
+                self.logger.debug(f"Processing save game: {save_name}")
 
-                # Load timeline for this save game
-                timeline = self._load_timeline_from_worktree(game_type, save_name, worktree_path, repo)
-                if timeline:
-                    self.timelines[game_type][save_name] = timeline
+                # Load timeline tree for this save game
+                timeline_tree = TimelineTree.from_worktree(worktree_path, game_type)
+                if timeline_tree:
+                    self.logger.debug(f"Successfully loaded timeline tree for {save_name}")
+                    self.timelines[game_type][save_name] = timeline_tree
+                else:
+                    self.logger.debug(f"Failed to load timeline tree for {save_name}")
+
+            self.logger.debug(f"Finished loading timeline trees for {game_type.name}")
 
         except Exception as e:
             self.logger.warning(f"Failed to load existing timelines for {game_type.name}: {e}")
 
-    def _load_timeline_from_worktree(self, game_type: GameType, save_name: str, worktree_path: Path, main_repo: Repo) -> Optional[Timeline]:
-        """
-        Load a timeline from an existing worktree.
 
-        Args:
-            game_type: The game type
-            save_name: The save game name
-            worktree_path: Path to the worktree
-            main_repo: The main repository
-
-        Returns:
-            Timeline object if successful, None otherwise
-        """
-        try:
-            # Open the worktree repository
-            worktree_repo = Repo(str(worktree_path))
-
-            # Get current branch name
-            current_branch_name = self._get_current_branch_name(worktree_repo)
-            if not current_branch_name:
-                return None
-
-            # Create timeline branches
-            main_branch_name = f"{save_name}-main"
-            main_branch = TimelineBranch(name=main_branch_name, is_main=True)
-            current_branch = main_branch if current_branch_name == main_branch_name else TimelineBranch(name=current_branch_name)
-
-            # Load checkpoints for branches
-            self._load_branch_checkpoints(worktree_repo, main_branch)
-            if current_branch != main_branch:
-                self._load_branch_checkpoints(worktree_repo, current_branch)
-
-            # Get current checkpoint
-            current_checkpoint = current_branch.get_latest_checkpoint()
-
-            # Create timeline
-            timeline = Timeline(
-                name=save_name,
-                game_type=game_type,
-                save_path=worktree_path,
-                worktree_path=worktree_path,
-                repository_path=Path(main_repo.path),
-                main_branch=main_branch,
-                current_branch=current_branch,
-                current_checkpoint=current_checkpoint,
-                status=TimelineStatus.ACTIVE
-            )
-
-            return timeline
-
-        except Exception as e:
-            self.logger.warning(f"Failed to load timeline from worktree {worktree_path}: {e}")
-            return None
-
-    def _get_current_branch_name(self, repo: Repo) -> Optional[str]:
-        """
-        Get the current branch name from a repository.
-
-        Args:
-            repo: The Git repository
-
-        Returns:
-            Current branch name or None if not found
-        """
-        try:
-            import os
-            head_file = os.path.join(str(repo.controldir()), "HEAD")
-            with open(head_file, "rb") as f:
-                head_content = f.read().strip()
-
-            if head_content.startswith(b"ref: "):
-                ref_path = head_content[5:].decode()  # Remove "ref: " prefix
-                # Extract branch name from refs/heads/branch_name
-                if ref_path.startswith("refs/heads/"):
-                    return ref_path[11:]  # Remove "refs/heads/"
-
-            return None
-        except Exception as e:
-            self.logger.warning(f"Failed to get current branch name: {e}")
-            return None
-
-    def _load_branch_checkpoints(self, repo: Repo, branch: TimelineBranch) -> None:
-        """
-        Load checkpoints for a specific branch.
-
-        Args:
-            repo: The Git repository
-            branch: The branch to load checkpoints for
-        """
-        try:
-            branch_ref = f"refs/heads/{branch.name}".encode()
-            if branch_ref not in repo.refs:
-                return
-
-            commit_id = repo.refs[branch_ref]
-            walker = repo.get_walker([commit_id])
-
-            for entry in walker:
-                commit = entry.commit
-                checkpoint = Checkpoint(
-                    commit_hash=commit.id.decode(),
-                    timestamp=datetime.fromtimestamp(commit.commit_time),
-                    message=commit.message.decode().strip(),
-                    author=commit.author.decode(),
-                    parent_hashes=[parent.decode() for parent in commit.parents]
-                )
-                branch.add_checkpoint(checkpoint)
-
-        except Exception as e:
-            self.logger.warning(f"Failed to load checkpoints for branch {branch.name}: {e}")
-
-    def load_timelines(self, game_type: GameType) -> bool:
+    def load_timelines_trees(self, game_type: GameType) -> bool:
         """
         Load timelines for a specific game type.
 
@@ -552,14 +334,14 @@ class TimelineManager:
 
             repo = self.repositories[game_type]
             if repo:  # Type guard to ensure repo is not None
-                self._load_existing_timelines(game_type, repo)
+                self._load_existing_timeline_trees(game_type, repo)
 
             return True
         except Exception as e:
             self.logger.error(f"Failed to load timelines for {game_type.name}: {e}")
             return False
 
-    def create_timeline(self, save_game: SaveGame) -> Optional[Timeline]:
+    def create_timeline(self, save_game: SaveGame) -> Optional[TimelineTree]:
         """
         Create a new timeline for a save game.
 
@@ -586,7 +368,7 @@ class TimelineManager:
             if save_game.game in self.timelines and save_game.name in self.timelines[save_game.game]:
                 raise TimelineError(f"Timeline already exists for {save_game.name}")
 
-            # Create worktree and timeline
+            # Create worktree
             timeline = self._create_worktree_timeline(save_game, repo)
 
             # Add to timelines
@@ -605,9 +387,9 @@ class TimelineManager:
             self.logger.error(f"Failed to create timeline for {save_game.name}: {e}")
             return None
 
-    def _create_worktree_timeline(self, save_game: SaveGame, repo: Repo) -> Timeline:
+    def _create_worktree_timeline(self, save_game: SaveGame, repo: Repo) -> TimelineTree:
         """
-        Create a new worktree and timeline for a save game.
+        Create a new worktree and timeline tree for a save game.
 
         Args:
             save_game: The save game to create timeline for
@@ -673,11 +455,11 @@ class TimelineManager:
             )
 
         # Create timeline branches
-        main_branch = TimelineBranch(name=main_branch_name, is_main=True)
+        main_branch = Timeline(name=main_branch_name, is_main=True)
         main_branch.add_checkpoint(checkpoint)
 
         # Create timeline
-        timeline = Timeline(
+        timeline = TimelineTree(
             name=save_game.name,
             game_type=save_game.game,
             save_path=save_game.path,
@@ -823,7 +605,7 @@ class TimelineManager:
             self.logger.error(f"Failed to restore checkpoint for {save_game.name}: {e}")
             return False
 
-    def get_timeline(self, save_game: SaveGame) -> Optional[Timeline]:
+    def get_timeline(self, save_game: SaveGame) -> Optional[TimelineTree]:
         """
         Get the timeline for a specific save game.
 
@@ -837,7 +619,7 @@ class TimelineManager:
             return self.timelines[save_game.game][save_game.name]
         return None
 
-    def get_timelines_for_game(self, game_type: GameType) -> Dict[str, Timeline]:
+    def get_timelines_for_game(self, game_type: GameType) -> Dict[str, TimelineTree]:
         """
         Get all timelines for a specific game type.
 
@@ -895,7 +677,7 @@ class TimelineManager:
             wt_repo.refs[new_branch_ref] = commit_hash.encode()
 
             # Create timeline branch
-            new_branch = TimelineBranch(name=branch_name)
+            new_branch = Timeline(name=branch_name)
             if from_checkpoint:
                 new_branch.add_checkpoint(from_checkpoint)
 
@@ -1103,9 +885,6 @@ class TimelineManager:
         """Shutdown the timeline manager and clean up resources."""
         try:
             self.logger.info("Shutting down timeline manager...")
-
-            # Unsubscribe from events
-            self._unsubscribe_from_events()
 
             # Clear all timelines
             self.timelines.clear()
