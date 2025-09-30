@@ -262,7 +262,7 @@ class TimelineManager:
                 self.repositories[game_type] = repo
 
                 # Create a first empty commit
-                porcelain.commit(repo.path, message="Initial commit".encode())
+                porcelain.commit(repo.path, message="__start__".encode())
                 self.logger.info(f"Created initial commit for {game_type.name}")
 
             return True
@@ -409,7 +409,7 @@ class TimelineManager:
             save_game.path.rmdir()
 
         # Create worktree with new branch using dulwich
-        main_branch_name = f"{save_game.name}-main"
+        main_branch_name = f"{save_game.name.replace(' ', '_').lower()}-main"
         porcelain.worktree_add(
             repo=repo.path,
             path=str(save_game.path),
@@ -427,30 +427,33 @@ class TimelineManager:
         wt_repo = Repo(str(save_game.path))
         worktree = wt_repo.get_worktree()
 
-        # Stage all files in the save game directory
+        # Stage all files in the save game directory including subdirectories
         file_names = []
-        for file_path in save_game.path.iterdir():
+        for file_path in save_game.path.rglob('*'):
             if file_path.is_file():
-                file_names.append(file_path.name)
+                # Get relative path from save game root
+                rel_path = file_path.relative_to(save_game.path)
+                file_names.append(str(rel_path))
 
         if file_names:
             worktree.stage(file_names)
-            commit_id = worktree.commit(message=f"Initial commit for {save_game.name}".encode())
+            commit_id = worktree.commit(message=f"Initial checkpoint for {save_game.name}".encode())
 
             # Create checkpoint
+            # TODO use the commit itself to populate checkpoint
             checkpoint = Checkpoint(
                 commit_hash=commit_id.decode(),
                 timestamp=datetime.now(),
-                message=f"Initial commit for {save_game.name}",
+                message=f"Initial checkpoint for {save_game.name}",
                 author="YACL Timeline Manager"
             )
         else:
             # Create empty commit if no files
-            commit_id = worktree.commit(message=f"Empty initial commit for {save_game.name}".encode())
+            commit_id = worktree.commit(message=f"Empty initial checkpoint for {save_game.name}".encode())
             checkpoint = Checkpoint(
                 commit_hash=commit_id.decode(),
                 timestamp=datetime.now(),
-                message=f"Empty initial commit for {save_game.name}",
+                message=f"Empty initial checkpoint for {save_game.name}",
                 author="YACL Timeline Manager"
             )
 
@@ -526,7 +529,9 @@ class TimelineManager:
             # Stage all changes
             file_names = []
             for file_path in timeline.worktree_path.rglob('*'):
-                if file_path.is_file() and file_path.name != "README.md":  # Skip the initial README
+                if (file_path.is_file() and
+                    file_path.name != "README.md" and  # Skip the initial README
+                    file_path.name != ".git"):  # Skip the worktree .git file
                     # Get relative path from worktree root
                     rel_path = file_path.relative_to(timeline.worktree_path)
                     file_names.append(str(rel_path))

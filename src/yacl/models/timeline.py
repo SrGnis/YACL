@@ -188,7 +188,7 @@ class TimelineTree:
             raise TimelineBranchError("No branches found in repository")
 
         # Validate main branch exists (named as save_name + "-main")
-        main_branch_name = f"{save_name}-main"
+        main_branch_name = f"{save_name.replace(' ', '_').lower()}-main"
         logger.debug(f"Looking for main branch: {main_branch_name}")
         if not branch_exists(worktree_repo, main_branch_name):
             logger.error(f"Main branch '{main_branch_name}' does not exist. Available branches: {all_branches}")
@@ -198,7 +198,14 @@ class TimelineTree:
         current_branch_name = get_current_branch_name(worktree_repo)
         logger.debug(f"Current branch: {current_branch_name}")
         if not current_branch_name:
-            raise TimelineBranchError("Could not determine current branch")
+            # We're in detached HEAD state, switch back to main branch
+            logger.warning("Repository is in detached HEAD state, switching to main branch")
+            from yacl.utils.git_ops import checkout_branch
+            if checkout_branch(worktree_repo, main_branch_name):
+                current_branch_name = main_branch_name
+                logger.info(f"Successfully switched to main branch: {main_branch_name}")
+            else:
+                raise TimelineBranchError("Could not determine current branch and failed to switch to main branch")
 
         # Get current checkpoint (HEAD commit)
         current_commit_hash = get_current_commit_hash(worktree_repo)
@@ -246,7 +253,7 @@ class TimelineTree:
 
         # Load all other branches that belong to this save game
         # Only load branches that start with the save name (e.g., "savegame01-*")
-        relevant_branches = [b for b in all_branches if b.startswith(f"{save_name}-") and b not in branches]
+        relevant_branches = [b for b in all_branches if b.startswith(f"{save_name.replace(' ', '_').lower()}-") and b not in branches]
         logger.debug(f"Loading remaining relevant branches: {relevant_branches}")
         for branch_name in relevant_branches:
             logger.debug(f"Loading branch: {branch_name}")
