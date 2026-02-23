@@ -1,5 +1,10 @@
-package com.yacl.bootstrap;
+package com.yacl.lifecycle;
 
+import com.yacl.bootstrap.connectivity.ConnectivityStatus;
+import com.yacl.bootstrap.connectivity.OptionalConnectivityChecker;
+import com.yacl.bootstrap.paths.PathReadinessInitializer;
+import com.yacl.bootstrap.settings.SettingsInitializer;
+import com.yacl.ui.shell.UiShellInitializer;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;

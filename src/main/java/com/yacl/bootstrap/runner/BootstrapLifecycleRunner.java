@@ -1,5 +1,6 @@
-package com.yacl.bootstrap;
+package com.yacl.bootstrap.runner;
 
+import com.yacl.lifecycle.AppLifecycleCoordinator;
 import jakarta.annotation.PreDestroy;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;

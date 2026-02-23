@@ -1,6 +1,6 @@
 package com.yacl.ui.shell;
 
-import com.yacl.bootstrap.LifecycleSnapshot;
+import com.yacl.lifecycle.LifecycleSnapshot;
 import java.util.List;
 
 /**

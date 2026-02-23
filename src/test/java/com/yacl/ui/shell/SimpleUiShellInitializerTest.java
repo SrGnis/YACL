@@ -1,12 +1,12 @@
-package com.yacl.ui;
+package com.yacl.ui.shell;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import com.yacl.bootstrap.LifecycleSnapshot;
-import com.yacl.bootstrap.LifecycleState;
-import com.yacl.bootstrap.LifecycleStatusProvider;
-import com.yacl.ui.shell.UiDialogPresenter;
-import com.yacl.ui.shell.UiDialogRequest;
+import com.yacl.lifecycle.LifecycleSnapshot;
+import com.yacl.lifecycle.LifecycleState;
+import com.yacl.lifecycle.LifecycleStatusProvider;
+import com.yacl.ui.dialog.UiDialogPresenter;
+import com.yacl.ui.dialog.UiDialogRequest;
 import com.yacl.ui.shell.UiShellViewModelFactory;
 import java.time.Instant;
 import java.util.ArrayList;

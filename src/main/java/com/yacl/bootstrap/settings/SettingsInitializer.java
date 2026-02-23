@@ -1,4 +1,4 @@
-package com.yacl.bootstrap;
+package com.yacl.bootstrap.settings;
 
 public interface SettingsInitializer {
 

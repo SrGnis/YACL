@@ -4,9 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.yacl.bootstrap.LifecycleSnapshot;
-import com.yacl.bootstrap.LifecycleState;
-import com.yacl.bootstrap.LifecycleStatusProvider;
+import com.yacl.lifecycle.LifecycleSnapshot;
+import com.yacl.lifecycle.LifecycleState;
+import com.yacl.lifecycle.LifecycleStatusProvider;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 

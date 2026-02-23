@@ -1,7 +1,7 @@
 package com.yacl.ui.shell;
 
-import com.yacl.bootstrap.LifecycleSnapshot;
-import com.yacl.bootstrap.LifecycleStatusProvider;
+import com.yacl.lifecycle.LifecycleSnapshot;
+import com.yacl.lifecycle.LifecycleStatusProvider;
 import java.util.List;
 import org.springframework.stereotype.Component;
 

@@ -1,4 +1,4 @@
-package com.yacl.bootstrap;
+package com.yacl.lifecycle;
 
 /**
  * Core lifecycle states for Phase 1 bootstrap.

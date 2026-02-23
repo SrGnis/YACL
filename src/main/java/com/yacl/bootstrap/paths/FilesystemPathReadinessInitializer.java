@@ -1,4 +1,4 @@
-package com.yacl.bootstrap;
+package com.yacl.bootstrap.paths;
 
 import java.nio.file.Files;
 import java.nio.file.Path;

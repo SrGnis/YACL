@@ -1,4 +1,4 @@
-package com.yacl.ui.shell;
+package com.yacl.ui.dialog;
 
 public interface UiDialogPresenter {
 

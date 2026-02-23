@@ -1,4 +1,4 @@
-package com.yacl.bootstrap;
+package com.yacl.bootstrap.connectivity;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;

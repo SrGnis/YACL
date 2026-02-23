@@ -1,9 +1,9 @@
-package com.yacl.ui;
+package com.yacl.ui.shell;
 
-import com.yacl.bootstrap.UiShellInitializer;
-import com.yacl.ui.shell.UiDialogId;
-import com.yacl.ui.shell.UiDialogPresenter;
-import com.yacl.ui.shell.UiDialogRequest;
+import com.yacl.ui.shell.UiShellInitializer;
+import com.yacl.ui.dialog.UiDialogId;
+import com.yacl.ui.dialog.UiDialogPresenter;
+import com.yacl.ui.dialog.UiDialogRequest;
 import com.yacl.ui.shell.UiShellTabSpec;
 import com.yacl.ui.shell.UiShellViewModel;
 import com.yacl.ui.shell.UiShellViewModelFactory;

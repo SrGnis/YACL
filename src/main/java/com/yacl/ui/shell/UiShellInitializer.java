@@ -1,4 +1,4 @@
-package com.yacl.bootstrap;
+package com.yacl.ui.shell;
 
 public interface UiShellInitializer {
 

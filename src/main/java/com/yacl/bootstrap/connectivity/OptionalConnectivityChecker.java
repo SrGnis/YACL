@@ -1,4 +1,4 @@
-package com.yacl.bootstrap;
+package com.yacl.bootstrap.connectivity;
 
 public interface OptionalConnectivityChecker {
 

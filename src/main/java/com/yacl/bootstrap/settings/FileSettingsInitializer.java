@@ -1,4 +1,4 @@
-package com.yacl.bootstrap;
+package com.yacl.bootstrap.settings;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;

@@ -1,4 +1,4 @@
-package com.yacl.ui.shell;
+package com.yacl.ui.dialog;
 
 /**
  * Phase 1 dialog scaffold identifiers for install flow entry points.
